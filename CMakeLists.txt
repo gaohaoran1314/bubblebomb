@@ -7,10 +7,11 @@ set(CMAKE_CXX_MODULE_STD ON)
 project(bubblebomb VERSION 0.1 LANGUAGES CXX)
 set(QT_QML_GENERATE_QMLLS_INI ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick)
+# 改动1：添加 Multimedia 组件
+find_package(Qt6 REQUIRED COMPONENTS Quick Multimedia)
 qt_standard_project_setup(REQUIRES 6.11)
 
-qt_add_executable(appbubblebomb  WIN32)
+qt_add_executable(appbubblebomb WIN32)
 qt_add_qml_module(appbubblebomb
     URI bubblebomb
     VERSION 1.0
@@ -21,14 +22,14 @@ qt_add_qml_module(appbubblebomb
                 Block.qml
                 Bomb.qml
                 Monster.qml
+                Wall.qml
+
 )
 target_compile_features(appbubblebomb PRIVATE cxx_std_23)
-target_link_libraries(appbubblebomb
-    PRIVATE Qt6::Quick
-            Qt6::Core
-            Qt6::Qml
-            Qt6::Gui
-)
+
+# 改动2：qt_add_qml_module 已自动链接 Qt6::Quick, Qt6::Core, Qt6::Qml, Qt6::Gui，
+# 只需额外添加 Multimedia
+target_link_libraries(appbubblebomb PRIVATE Qt6::Multimedia)
 
 set(CMAKE_INSTALL_PREFIX "/opt/${PROJECT_NAME}" CACHE PATH "Install path prefix" FORCE)
 install(TARGETS appbubblebomb

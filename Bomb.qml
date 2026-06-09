@@ -10,7 +10,8 @@ Rectangle {
     border.width: 2
 
     signal onExploded()
-    property bool isBomb: true  // 标记为炸弹，用于碰撞检测
+    property bool isBomb: true
+    property bool exploded: false
 
     Component {
         id: firePrefab
@@ -44,33 +45,39 @@ Rectangle {
     }
 
     function explode() {
+        if (exploded) return
+        exploded = true
+
         color = "orange"
         radius = 0
 
         createFire(x, y)
-        createFire(x-40,y)
-        createFire(x+40,y)
-        createFire(x,y-40)
-        createFire(x,y+40)
+        createFire(x-40, y)
+        createFire(x+40, y)
+        createFire(x, y-40)
+        createFire(x, y+40)
 
         hitTargets()
         deleteTimer.start()
     }
 
-    function createFire(fx,fy){
+    function createFire(fx, fy) {
         let f = firePrefab.createObject(parent)
-        f.x=fx; f.y=fy
+        f.x = fx; f.y = fy
     }
 
-    function hitTargets(){
+    function hitTargets() {
         let list = parent.children
-        for(var i=0;i<list.length;i++){
-            let o=list[i]
-            let dx=Math.abs(o.x-x)
-            let dy=Math.abs(o.y-y)
-            if(dx<80&&dy<80){
-                if(o.objectName==="monster"&&o.alive) o.die()
-                if(o.isBlock&&o.alive) o.die()
+        for(var i = 0; i < list.length; i++) {
+            let o = list[i]
+            let dx = Math.abs(o.x - x)
+            let dy = Math.abs(o.y - y)
+            if(dx < 80 && dy < 80) {
+                if(o.objectName === "monster" && o.alive) o.die()
+                if(o.isBlock && o.alive && o.isBreakable !== false) o.die()
+                if(o.isBomb && !o.exploded) {
+                    o.explode()
+                }
             }
         }
     }

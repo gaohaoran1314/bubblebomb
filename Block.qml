@@ -10,6 +10,7 @@ Rectangle {
 
     property bool isBlock: true
     property bool alive: true
+    property bool isBreakable: true   // 新增，默认可破坏
 
     Timer {
         id: destroyTimer
@@ -18,7 +19,6 @@ Rectangle {
         onTriggered: block.destroy()
     }
 
-    // 被炸毁接口
     function die() {
         if (!alive) return
         alive = false
