@@ -10,6 +10,7 @@ Rectangle {
 
     property bool isBlock: true
     property bool alive: true
+    property bool isBreakable: true
 
     Timer {
         id: destroyTimer
@@ -18,11 +19,15 @@ Rectangle {
         onTriggered: block.destroy()
     }
 
-    // 被炸毁接口
     function die() {
         if (!alive) return
         alive = false
         color = "#ff8800"
         destroyTimer.start()
+
+        // 掉落概率从 0.3 提高到 0.5（50%）
+        if (Math.random() < 1 && typeof gameRoot !== "undefined" && gameRoot.spawnPowerUpAt) {
+            gameRoot.spawnPowerUpAt(x, y)
+        }
     }
 }
