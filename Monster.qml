@@ -2,141 +2,303 @@ import QtQuick 2.15
 
 Rectangle {
     id: monster
-    width: 40
-    height: 40
-    color: "purple"
-    radius: 8
+    width: 40; height: 40; color: "purple"; radius: 8
     objectName: "monster"
 
     property bool alive: true
-    property real speed: 1.8
+    property real speed: 3.2
     property Item targetPlayer: null
 
-    // AI状态控制
     property int moveDir: Math.floor(Math.random() * 4)
     property int stuckCount: 0
 
-    Timer {
-        id: deathTimer
-        interval: 300
-        running: false
-        onTriggered: monster.destroy()
+    property real lastKnownX: 0; property real lastKnownY: 0; property bool hasMemory: false
+    property real detectionRange: 2500
+    property int switchCooldown: 2; property int cooldownTimer: 0
+
+    property real bombTimer: 0
+    property real bombCooldown: 3000 + Math.random() * 3000
+
+    // 规避抖动控制
+    property int avoidLockTimer: 0
+    property int avoidLockFrames: 6
+
+    // 呼吸动画
+    SequentialAnimation on scale {
+        loops: Animation.Infinite; running: alive
+        NumberAnimation { to: 1.05; duration: 800 }
+        NumberAnimation { to: 0.95; duration: 800 }
     }
 
-    Timer {
-        interval: 70
-        running: alive
-        repeat: true
-        onTriggered: moveAI()
+    // 眼睛
+    Row {
+        anchors.centerIn: parent; spacing: 10
+        Rectangle { width: 8; height: 12; radius: 4; color: "white"; Rectangle { width: 4; height: 6; radius: 2; color: "black"; anchors.centerIn: parent } }
+        Rectangle { width: 8; height: 12; radius: 4; color: "white"; Rectangle { width: 4; height: 6; radius: 2; color: "black"; anchors.centerIn: parent } }
     }
+
+    // 死亡粒子组件
+    Component {
+        id: deathParticle
+        Rectangle {
+            width: 6; height: 6
+            color: Qt.rgba(0.8 + Math.random() * 0.2, 0.2, 0.8 + Math.random() * 0.2, 1)
+            x: monster.x + Math.random() * 40 - 10
+            y: monster.y + Math.random() * 40 - 10
+            property real vx: (Math.random() - 0.5) * 120
+            property real vy: (Math.random() - 0.5) * 120 - 40
+            NumberAnimation on x { to: x + vx; duration: 400; easing.type: Easing.OutQuad }
+            NumberAnimation on y { to: y + vy; duration: 400; easing.type: Easing.OutQuad }
+            NumberAnimation on opacity { to: 0; duration: 400 }
+            Timer { interval: 400; running: true; onTriggered: parent.destroy() }
+        }
+    }
+
+    Timer { id: deathTimer; interval: 300; running: false; onTriggered: monster.destroy() }
+    Timer { id: forceDestroyTimer; interval: 600; running: false; onTriggered: monster.destroy() }
+    Timer { interval: 70; running: alive; repeat: true; onTriggered: moveAI() }
+
+    Component { id: bombComponent; Bomb {} }
 
     function moveAI() {
-        if (!alive || !targetPlayer) return
+        if (!alive) return
+        targetPlayer = findClosestAlivePlayerInRange()
+        if (!targetPlayer) { randomMove(); cooldownTimer = 0; return }
 
-        let nx = x
-        let ny = y
+        var predictedX = targetPlayer.x, predictedY = targetPlayer.y
+        if (targetPlayer.keyLeft) predictedX -= 20
+        else if (targetPlayer.keyRight) predictedX += 20
+        if (targetPlayer.keyUp) predictedY -= 20
+        else if (targetPlayer.keyDown) predictedY += 20
 
-        // 卡住超过3次 → 强制随机方向
-        if (stuckCount > 3) {
-            moveDir = Math.floor(Math.random() * 4)
-            stuckCount = 0
-        }
+        var dist = Math.sqrt((x-targetPlayer.x)*(x-targetPlayer.x) + (y-targetPlayer.y)*(y-targetPlayer.y))
+        var speedMul = 1.0
+        if (dist < 100) speedMul = 1.6
+        else if (dist < 200) speedMul = 1.3
+        else if (dist < 400) speedMul = 1.1
 
-        // 核心：视线检测，被墙挡住就不追玩家，改为随机移动
-        let dx = targetPlayer.x - x
-        let dy = targetPlayer.y - y
+        let dx = predictedX - x, dy = predictedY - y
+        let isDiagonal = Math.abs(dx) > 20 && Math.abs(dy) > 20
+
         let lineOfSight = true
-
-        // 简单的直线障碍检测
         for (var i = 0; i < gameRoot.children.length; i++) {
             let o = gameRoot.children[i]
-            if (o.isBlock) {
-                if (isBlockInTheWay(x, y, targetPlayer.x, targetPlayer.y, o)) {
-                    lineOfSight = false
-                    break
+            if (o.isBlock && isBlockInTheWay(x, y, predictedX, predictedY, o)) { lineOfSight = false; break }
+        }
+
+        let desiredDir = moveDir
+        if (lineOfSight) {
+            lastKnownX = predictedX; lastKnownY = predictedY; hasMemory = true
+            if (Math.abs(dx) > Math.abs(dy)) desiredDir = dx > 0 ? 3 : 2
+            else desiredDir = dy > 0 ? 1 : 0
+        } else {
+            if (hasMemory) {
+                let dxM = lastKnownX - x, dyM = lastKnownY - y
+                if (Math.abs(dxM) < 5 && Math.abs(dyM) < 5) { hasMemory = false; desiredDir = Math.floor(Math.random()*4) }
+                else { desiredDir = Math.abs(dxM) > Math.abs(dyM) ? (dxM > 0 ? 3 : 2) : (dyM > 0 ? 1 : 0) }
+            } else { if (Math.random() < 0.05) desiredDir = Math.floor(Math.random()*4) }
+        }
+
+        // 炸弹规避
+        if (avoidLockTimer <= 0) {
+            var safeDir = avoidBombs(desiredDir)
+            if (safeDir !== desiredDir) {
+                if (Math.abs(safeDir - desiredDir) === 2) {
+                    desiredDir = safeDir
+                    avoidLockTimer = avoidLockFrames
+                } else if (Math.abs(safeDir - desiredDir) === 1) {
+                    if (Math.random() < 0.5) {
+                        desiredDir = safeDir
+                        avoidLockTimer = avoidLockFrames
+                    }
+                }
+            }
+        }
+        if (avoidLockTimer > 0) avoidLockTimer--
+
+        let moveSpeed = speed * speedMul
+        if (lineOfSight && isDiagonal) moveSpeed *= 1.5
+
+        bombTimer += 70
+        if (bombTimer >= bombCooldown) { tryPlaceBomb(); bombTimer = 0; bombCooldown = 3000 + Math.random()*3000 }
+
+        if (cooldownTimer > 0) cooldownTimer--
+        if (desiredDir !== moveDir && cooldownTimer <= 0 && !isBlockedInDir(desiredDir, moveSpeed)) {
+            moveDir = desiredDir; cooldownTimer = switchCooldown
+        }
+
+        if (isBlockedInDir(moveDir, moveSpeed)) {
+            cooldownTimer = 0
+            let t1 = (moveDir+1)%4, t2 = (moveDir+3)%4
+            if (!isBlockedInDir(t1, moveSpeed)) { moveDir = t1; cooldownTimer = switchCooldown }
+            else if (!isBlockedInDir(t2, moveSpeed)) { moveDir = t2; cooldownTimer = switchCooldown }
+            else { moveDir = Math.floor(Math.random()*4); cooldownTimer = switchCooldown }
+        }
+
+        if (!tryMove(moveDir, moveSpeed)) {
+            cooldownTimer = 0
+            let t1 = (moveDir+1)%4, t2 = (moveDir+3)%4
+            if (!tryMove(t1, moveSpeed)) {
+                if (!tryMove(t2, moveSpeed)) {
+                    let t3 = (moveDir+2)%4
+                    if (!tryMove(t3, moveSpeed)) tryMove(Math.floor(Math.random()*4), moveSpeed)
                 }
             }
         }
 
-        // 只有能看到玩家，才会朝着玩家走；否则随机移动
-        if (lineOfSight) {
-            if (Math.abs(dx) > Math.abs(dy)) {
-                moveDir = dx > 0 ? 3 : 2
-            } else {
-                moveDir = dy > 0 ? 1 : 0
-            }
-        } else {
-            // 看不到玩家，保持随机移动，防止卡死
-            if (Math.random() < 0.03) {
-                moveDir = Math.floor(Math.random() * 4)
-            }
-        }
-
-        // 计算下一步
-        if (moveDir === 0) ny -= speed
-        if (moveDir === 1) ny += speed
-        if (moveDir === 2) nx -= speed
-        if (moveDir === 3) nx += speed
-
-        // 碰撞检测
-        if (checkCollision(nx, ny)) {
-            stuckCount++
-            moveDir = Math.floor(Math.random() * 4)
-            return
-        }
-
-        // 成功移动，重置状态
-        stuckCount = 0
-        x = nx
-        y = ny
-
-        // 边界限制
-        if (x < 20) x = 20
-        if (x > 1340) x = 1340
-        if (y < 20) y = 20
-        if (y > 840) y = 840
+        if (x < 20) x = 20; if (x > 1340) x = 1340; if (y < 20) y = 20; if (y > 840) y = 840
     }
 
-    // 检测方块是否挡住视线（简化版）
+    function avoidBombs(pref) {
+        var dangerousBombs = []
+        for (var i = 0; i < gameRoot.children.length; i++) {
+            var b = gameRoot.children[i]
+            if (b.isBomb && !b.exploded && b.alive !== false) {
+                var dist = Math.sqrt((x - b.x)*(x - b.x) + (y - b.y)*(y - b.y))
+                if (dist < 200) dangerousBombs.push(b)
+            }
+        }
+        if (dangerousBombs.length === 0) return pref
+
+        var scores = [0,0,0,0]
+        for (var d = 0; d < 4; d++) {
+            var nx = x, ny = y
+            if (d === 0) ny -= 40; else if (d === 1) ny += 40
+            else if (d === 2) nx -= 40; else if (d === 3) nx += 40
+            if (!checkCollision(nx, ny)) scores[d] += 50
+            for (var j = 0; j < dangerousBombs.length; j++) {
+                var db = dangerousBombs[j]
+                scores[d] += Math.sqrt((nx-db.x)*(nx-db.x) + (ny-db.y)*(ny-db.y))
+            }
+        }
+        var bestDir = 0, maxScore = -Infinity
+        for (var s = 0; s < 4; s++) { if (scores[s] > maxScore) { maxScore = scores[s]; bestDir = s } }
+        return bestDir
+    }
+
+    function tryPlaceBomb() {
+        let bx = Math.round(x / 40) * 40, by = Math.round(y / 40) * 40
+        if (bx < 40 || bx > 1320 || by < 40 || by > 820) return
+        if (isBlockedAt(bx, by) || isBombAt(bx, by)) return
+        bombComponent.createObject(gameRoot, { x: bx, y: by, range: 1, owner: monster })
+    }
+
+    function isBlockedAt(bx, by) {
+        for (var i = 0; i < gameRoot.children.length; i++) {
+            var o = gameRoot.children[i]
+            if (o.isBlock && o.alive !== false) {
+                if (bx + 40 > o.x && bx < o.x + 40 && by + 40 > o.y && by < o.y + 40) return true
+            }
+        }
+        return false
+    }
+
+    function isBombAt(bx, by) {
+        for (var i = 0; i < gameRoot.children.length; i++) {
+            var o = gameRoot.children[i]
+            if (o.isBomb && o.alive !== false && !o.exploded) {
+                if (bx + 40 > o.x && bx < o.x + 40 && by + 40 > o.y && by < o.y + 40) return true
+            }
+        }
+        return false
+    }
+
+    function findClosestAlivePlayerInRange() {
+        var closest = null, minDist = Infinity
+        for (var i = 0; i < gameRoot.children.length; i++) {
+            var obj = gameRoot.children[i]
+            if (obj.hp !== undefined && !obj.isDead) {
+                var dx = obj.x - x, dy = obj.y - y
+                var dist = Math.sqrt(dx*dx + dy*dy)
+                if (dist < minDist && dist <= detectionRange) { minDist = dist; closest = obj }
+            }
+        }
+        return closest
+    }
+
+    function isBlockedInDir(dir, spd) {
+        if (spd === undefined) spd = speed
+        let nx = x, ny = y
+        if (dir === 0) ny -= spd; else if (dir === 1) ny += spd
+        else if (dir === 2) nx -= spd; else if (dir === 3) nx += spd
+        return checkCollision(nx, ny)
+    }
+
+    function tryMove(dir, spd) {
+        if (spd === undefined) spd = speed
+        let nx = x, ny = y
+        if (dir === 0) ny -= spd; else if (dir === 1) ny += spd
+        else if (dir === 2) nx -= spd; else if (dir === 3) nx += spd
+        if (!checkCollision(nx, ny)) { x = nx; y = ny; stuckCount = 0; return true }
+        stuckCount++
+        if (stuckCount > 5) {
+            for (var d = 0; d < 4; d++) {
+                let jx = x, jy = y
+                if (d === 0) jy -= speed * 2; else if (d === 1) jy += speed * 2
+                else if (d === 2) jx -= speed * 2; else if (d === 3) jx += speed * 2
+                if (!checkCollision(jx, jy)) {
+                    x = jx; y = jy
+                    if (x < 20) x = 20; if (x > 1340) x = 1340
+                    if (y < 20) y = 20; if (y > 840) y = 840
+                    stuckCount = 0; return true
+                }
+            }
+            stuckCount = 0; moveDir = Math.floor(Math.random()*4)
+        }
+        return false
+    }
+
+    function randomMove() {
+        if (Math.random() < 0.03) moveDir = Math.floor(Math.random()*4)
+        let nx = x, ny = y
+        if (moveDir === 0) ny -= speed; else if (moveDir === 1) ny += speed
+        else if (moveDir === 2) nx -= speed; else if (moveDir === 3) nx += speed
+        if (!checkCollision(nx, ny)) { x = nx; y = ny }
+        else { moveDir = Math.floor(Math.random()*4) }
+        if (x < 20) x = 20; if (x > 1340) x = 1340; if (y < 20) y = 20; if (y > 840) y = 840
+    }
+
     function isBlockInTheWay(x1, y1, x2, y2, block) {
-        // 用矩形范围近似判断方块是否在两点之间
-        let blockCenterX = block.x + block.width / 2
-        let blockCenterY = block.y + block.height / 2
-
-        // 点到直线的距离判断（简化版）
-        let lineLen = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        if (lineLen === 0) return false
-
-        let t = ((blockCenterX - x1) * (x2 - x1) + (blockCenterY - y1) * (y2 - y1)) / (lineLen ** 2)
+        let bcx = block.x + block.width / 2, bcy = block.y + block.height / 2
+        let len = Math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1)); if (len === 0) return false
+        let t = ((bcx-x1)*(x2-x1) + (bcy-y1)*(y2-y1)) / (len*len)
         if (t < 0 || t > 1) return false
-
-        let closestX = x1 + t * (x2 - x1)
-        let closestY = y1 + t * (y2 - y1)
-
-        let dist = Math.sqrt((blockCenterX - closestX) ** 2 + (blockCenterY - closestY) ** 2)
-        return dist < block.width
+        let cx = x1 + t*(x2-x1), cy = y1 + t*(y2-y1)
+        return Math.sqrt((bcx-cx)*(bcx-cx) + (bcy-cy)*(bcy-cy)) < block.width
     }
 
-    // 方块+炸弹碰撞检测
     function checkCollision(px, py) {
         for (var i = 0; i < gameRoot.children.length; i++) {
             let o = gameRoot.children[i]
+            if (o.isBomb && o.owner === monster && !o.exploded) {
+                if (Math.abs(monster.x - o.x) < 40 && Math.abs(monster.y - o.y) < 40) continue
+            }
             if ((o.isBlock || o.isBomb) && o.alive !== false) {
-                if (px + width > o.x &&
-                    px < o.x + o.width &&
-                    py + height > o.y &&
-                    py < o.y + o.height)
-                {
-                    return true
-                }
+                if (px + 36 > o.x && px + 4 < o.x + 40 && py + 36 > o.y && py + 4 < o.y + 40) return true
             }
         }
         return false
     }
 
     function die() {
+        if (!alive) return
         alive = false
         color = "#ff4444"
-        deathTimer.start()
+
+        // 死亡粒子
+        for (var i = 0; i < 8; i++) {
+            deathParticle.createObject(monster.parent)
+        }
+
+        // 中立化自己的炸弹
+        for (var j = 0; j < gameRoot.children.length; j++) {
+            var obj = gameRoot.children[j]
+            if (obj.isBomb && obj.owner === monster && !obj.exploded) {
+                obj.owner = null
+            }
+        }
+
+        deathTimer.restart()
+        forceDestroyTimer.restart()
     }
 }
