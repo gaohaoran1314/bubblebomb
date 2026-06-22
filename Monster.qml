@@ -197,7 +197,7 @@ Rectangle {
 
     Timer { id: deathTimer; interval: 300; running: false; onTriggered: monster.destroy() }
     Timer { id: forceDestroyTimer; interval: 600; running: false; onTriggered: monster.destroy() }
-    Timer { interval: 70; running: alive && !isClient; repeat: true; onTriggered: moveAI() }
+    Timer { interval: 70; running: alive; repeat: true; onTriggered: moveAI() }
 
     Timer {
         interval: 16
@@ -317,20 +317,31 @@ Rectangle {
 
     function findClosestAlivePlayerInRange() {
         var candidates = []
-        if (typeof gameRoot.player1 !== "undefined" && !gameRoot.player1.isDead) {
+        // 1. 直接添加玩家1
+        if (gameRoot.player1 && !gameRoot.player1.isDead) {
             candidates.push(gameRoot.player1)
         }
+        // 2. 通过 getPlayer2 添加玩家2（Loader 加载的项）
         var p2 = (typeof gameRoot.getPlayer2 === "function") ? gameRoot.getPlayer2() : null
         if (p2 && !p2.isDead) {
             candidates.push(p2)
         }
+        // 3. 遍历直接子对象，添加其他可能的玩家（避免遗漏）
+        for (var i = 0; i < gameRoot.children.length; i++) {
+            var obj = gameRoot.children[i]
+            if (obj.hp !== undefined && !obj.isDead && candidates.indexOf(obj) === -1) {
+                candidates.push(obj)
+            }
+        }
+        // 寻找最近的目标
         var closest = null, minDist = Infinity
-        for (var i = 0; i < candidates.length; i++) {
-            var p = candidates[i]
+        for (var j = 0; j < candidates.length; j++) {
+            var p = candidates[j]
             var dx = p.x - x, dy = p.y - y
             var dist = Math.sqrt(dx*dx + dy*dy)
             if (dist < minDist && dist <= detectionRange) {
-                minDist = dist; closest = p
+                minDist = dist
+                closest = p
             }
         }
         return closest
