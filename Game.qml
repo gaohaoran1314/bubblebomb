@@ -20,7 +20,7 @@ Rectangle {
     property var pendingInputs: []
     property real interpolationFactor: 0.5
 
-    // ★ 怪物 ID 自增器
+    // 怪物 ID 自增器
     property int nextMonsterId: 1
 
     // 环境光点（飘浮灰尘）
@@ -145,13 +145,13 @@ Rectangle {
         }
 
         if (mode === "client") {
-            if (networkManager) {
-                if (event.key === Qt.Key_Left || event.key === Qt.Key_A)       networkManager.sendInput("left", true)
-                else if (event.key === Qt.Key_Right || event.key === Qt.Key_D) networkManager.sendInput("right", true)
-                else if (event.key === Qt.Key_Up || event.key === Qt.Key_W)    networkManager.sendInput("up", true)
-                else if (event.key === Qt.Key_Down || event.key === Qt.Key_S)  networkManager.sendInput("down", true)
+            if (NetworkManager) {
+                if (event.key === Qt.Key_Left || event.key === Qt.Key_A)       NetworkManager.sendInput("left", true)
+                else if (event.key === Qt.Key_Right || event.key === Qt.Key_D) NetworkManager.sendInput("right", true)
+                else if (event.key === Qt.Key_Up || event.key === Qt.Key_W)    NetworkManager.sendInput("up", true)
+                else if (event.key === Qt.Key_Down || event.key === Qt.Key_S)  NetworkManager.sendInput("down", true)
                 else if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                    networkManager.sendInput("bomb", true)
+                    NetworkManager.sendInput("bomb", true)
             }
             var p2 = getPlayer2()
             if (p2) {
@@ -184,13 +184,13 @@ Rectangle {
 
     Keys.onReleased: function(event) {
         if (mode === "client") {
-            if (networkManager) {
-                if (event.key === Qt.Key_Left || event.key === Qt.Key_A)       networkManager.sendInput("left", false)
-                else if (event.key === Qt.Key_Right || event.key === Qt.Key_D) networkManager.sendInput("right", false)
-                else if (event.key === Qt.Key_Up || event.key === Qt.Key_W)    networkManager.sendInput("up", false)
-                else if (event.key === Qt.Key_Down || event.key === Qt.Key_S)  networkManager.sendInput("down", false)
+            if (NetworkManager) {
+                if (event.key === Qt.Key_Left || event.key === Qt.Key_A)       NetworkManager.sendInput("left", false)
+                else if (event.key === Qt.Key_Right || event.key === Qt.Key_D) NetworkManager.sendInput("right", false)
+                else if (event.key === Qt.Key_Up || event.key === Qt.Key_W)    NetworkManager.sendInput("up", false)
+                else if (event.key === Qt.Key_Down || event.key === Qt.Key_S)  NetworkManager.sendInput("down", false)
                 else if (event.key === Qt.Key_Space || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
-                    networkManager.sendInput("bomb", false)
+                    NetworkManager.sendInput("bomb", false)
             }
             var p2 = getPlayer2()
             if (p2) {
@@ -231,8 +231,8 @@ Rectangle {
         var types = ["bomb", "bomb", "speed", "speed", "health", "range"]
         var type = types[Math.floor(Math.random() * types.length)]
         powerUpTemplate.createObject(gameRoot, { "x": x, "y": y, "type": type })
-        if (mode === "host" && typeof networkManager !== "undefined") {
-            networkManager.sendPowerUpSpawned(x, y, type)
+        if (mode === "host" && typeof NetworkManager !== "undefined") {
+            NetworkManager.sendPowerUpSpawned(x, y, type)
         }
     }
 
@@ -269,7 +269,7 @@ Rectangle {
         id: networkTimer
         interval: 30; running: (mode === "host"); repeat: true
         onTriggered: {
-            if (networkManager) networkManager.sendSnapshot(collectSnapshot())
+            if (NetworkManager) NetworkManager.sendSnapshot(collectSnapshot())
         }
     }
 
@@ -290,7 +290,6 @@ Rectangle {
                 })
             }
         }
-        // ★ 怪物数据包含 ID
         for (var j = 0; j < gameRoot.children.length; j++) {
             var m = gameRoot.children[j]
             if (m.objectName === "monster" && m.alive)
@@ -301,7 +300,6 @@ Rectangle {
 
     function applySnapshot(snapshot) {
         if (!snapshot) return
-        // 玩家1 插值
         if (snapshot.players && snapshot.players.length > 0) {
             var p1 = snapshot.players[0]
             player1.x = player1.x + (p1.x - player1.x) * interpolationFactor
@@ -309,7 +307,6 @@ Rectangle {
             player1.hp = p1.hp; player1.maxBomb = p1.maxBomb; player1.currentBomb = p1.currentBomb
             player1.bombRange = p1.bombRange; player1.color = p1.color; player1.isDead = p1.isDead
         }
-        // 玩家2 插值
         var p2 = getPlayer2()
         if (p2 && snapshot.players && snapshot.players.length > 1) {
             var p2d = snapshot.players[1]
@@ -319,7 +316,6 @@ Rectangle {
             p2.bombRange = p2d.bombRange; p2.color = p2d.color; p2.isDead = p2d.isDead
         }
 
-        // ★ 怪物同步（基于 ID，平滑移动）
         if (snapshot.monsters) {
             var existingMonsters = []
             for (var i = 0; i < gameRoot.children.length; i++) {
@@ -348,7 +344,6 @@ Rectangle {
                 }
             }
 
-            // 删除多余的本地怪物
             for (var d = 0; d < existingMonsters.length; d++) {
                 existingMonsters[d].destroy()
             }
@@ -384,31 +379,42 @@ Rectangle {
         powerUpTemplate.createObject(gameRoot, { "x": x, "y": y, "type": type })
     }
 
+    function handlePowerUpCollected(x, y, type) {
+        for (var i = 0; i < gameRoot.children.length; i++) {
+            var obj = gameRoot.children[i]
+            if (obj.objectName === "powerup" && Math.abs(obj.x - x) < 20 && Math.abs(obj.y - y) < 20 && obj.type === type && obj.alive) {
+                obj.collect()
+                break
+            }
+        }
+    }
+
     Component.onCompleted: {
         if (mode === "client") {
             player1.moveSpeed = 0
         }
 
         if (mode === "host") {
-            if (networkManager) {
-                networkManager.inputReceived.connect(handleRemoteInput)
-                networkManager.snapshotReceived.connect(applySnapshot)
-                networkManager.gameOverReceived.connect(function(winner) {
+            if (NetworkManager) {
+                NetworkManager.inputReceived.connect(handleRemoteInput)
+                NetworkManager.snapshotReceived.connect(applySnapshot)
+                NetworkManager.gameOverReceived.connect(function(winner) {
                     gameOver = true; victory = (winner === "host")
                 })
-                networkManager.resetGameReceived.connect(resetGame)
+                NetworkManager.resetGameReceived.connect(resetGame)
             }
         } else if (mode === "client") {
-            if (networkManager) {
-                networkManager.snapshotReceived.connect(applySnapshot)
-                networkManager.gameOverReceived.connect(function(winner) {
+            if (NetworkManager) {
+                NetworkManager.snapshotReceived.connect(applySnapshot)
+                NetworkManager.gameOverReceived.connect(function(winner) {
                     gameOver = true; victory = (winner === "client")
                 })
-                networkManager.resetGameReceived.connect(resetGame)
-                networkManager.bombPlaced.connect(handleBombPlaced)
-                networkManager.bombExploded.connect(handleBombExploded)
-                networkManager.blockDestroyed.connect(handleBlockDestroyed)
-                networkManager.powerUpSpawned.connect(handlePowerUpSpawned)
+                NetworkManager.resetGameReceived.connect(resetGame)
+                NetworkManager.bombPlaced.connect(handleBombPlaced)
+                NetworkManager.bombExploded.connect(handleBombExploded)
+                NetworkManager.blockDestroyed.connect(handleBlockDestroyed)
+                NetworkManager.powerUpSpawned.connect(handlePowerUpSpawned)
+                NetworkManager.powerUpCollected.connect(handlePowerUpCollected)
             }
         }
         spawnMonstersAtCorners()
@@ -428,7 +434,7 @@ Rectangle {
             if (!alive) {
                 victory = true; gameOver = true
                 if (music && typeof music.playWin === "function") music.playWin()
-                if (mode === "host" && networkManager) networkManager.sendGameOver("host")
+                if (mode === "host" && NetworkManager) NetworkManager.sendGameOver("host")
             }
         }
     }
@@ -607,7 +613,6 @@ Rectangle {
             }
         }
 
-        // 清除道具、怪物、炸弹
         for (var i = gameRoot.children.length - 1; i >= 0; i--) {
             var obj = gameRoot.children[i]
             if (obj.objectName === "powerup" || obj.objectName === "monster" || obj.isBomb) obj.destroy()
@@ -616,13 +621,13 @@ Rectangle {
             var block = gameRoot.children[j]
             if (block.isBlock && block.isBreakable) { block.alive = true; block.color = "#7f8c8d" }
         }
-        nextMonsterId = 1   // ★ 重置怪物 ID
+        nextMonsterId = 1
         spawnMonstersAtCorners()
         gameRoot.forceActiveFocus()
     }
 
     function returnToMainMenu() {
-        if (mode === "host" || mode === "client") { if (networkManager) networkManager.disconnect() }
+        if (mode === "host" || mode === "client") { if (NetworkManager) NetworkManager.disconnect() }
         if (music && typeof music.stopBGM === "function") music.stopBGM()
         if (parent && parent.source !== undefined) parent.source = ""
     }

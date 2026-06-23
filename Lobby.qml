@@ -15,9 +15,9 @@ Rectangle {
             MouseArea {
                 anchors.fill: parent
                 onClicked: {
-                    if (typeof networkManager !== "undefined") {
-                        if (networkManager.createServer()) {
-                            ipText.text = "本机 IP: " + networkManager.getLocalIP()
+                    if (typeof NetworkManager !== "undefined") {
+                        if (NetworkManager.createServer()) {
+                            ipText.text = "本机 IP: " + NetworkManager.getLocalIP()
                             statusText.text = "等待客户端连接..."
                         } else { statusText.text = "创建失败，端口可能被占用" }
                     } else { statusText.text = "网络管理器未初始化" }
@@ -40,8 +40,8 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            if (typeof networkManager !== "undefined" && ipInput.text != "") {
-                                if (networkManager.joinServer(ipInput.text)) {
+                            if (typeof NetworkManager !== "undefined" && ipInput.text != "") {
+                                if (NetworkManager.joinServer(ipInput.text)) {
                                     statusText.text = "连接成功，等待开始..."; startTimer.start()
                                 } else { statusText.text = "连接失败，检查IP和网络" }
                             }
@@ -65,15 +65,15 @@ Rectangle {
         id: startTimer; interval: 2000
         onTriggered: {
             if (typeof gameLoader !== "undefined") {
-                var mode = (typeof networkManager !== "undefined" && networkManager.isHost) ? "host" : "client"
+                var mode = (typeof NetworkManager !== "undefined" && NetworkManager.isHost) ? "host" : "client"
                 gameLoader.setSource("Game.qml", {"mode": mode})
             }
         }
     }
 
     Component.onCompleted: {
-        if (typeof networkManager !== "undefined") {
-            networkManager.connected.connect(function() {
+        if (typeof NetworkManager !== "undefined") {
+            NetworkManager.connected.connect(function() {
                 statusText.text = "已连接！正在进入游戏..."
                 startTimer.start()
             })

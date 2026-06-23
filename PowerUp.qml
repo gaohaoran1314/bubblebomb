@@ -6,15 +6,16 @@ Rectangle {
     color: "gold"; border.color: "#d4a017"; border.width: 2
     objectName: "powerup"
 
-    property string type: "bomb"; property int amount: 1; property bool alive: true
+    property string type: "bomb"
+    property int amount: 1
+    property bool alive: true
 
-    // 漂浮动画
     SequentialAnimation on y {
         loops: Animation.Infinite; running: true
         NumberAnimation { to: y - 4; duration: 600; easing.type: Easing.InOutQuad }
         NumberAnimation { to: y + 4; duration: 600; easing.type: Easing.InOutQuad }
     }
-    // 缓慢旋转
+
     RotationAnimation on rotation {
         loops: Animation.Infinite; running: true
         from: 0; to: 360; duration: 3000
@@ -34,7 +35,26 @@ Rectangle {
         font.pixelSize: 16; color: "black"
     }
 
-    Timer { id: disappearTimer; interval: 30000; running: true; onTriggered: { if (powerUp.alive) { powerUp.alive = false; powerUp.destroy() } } }
+    Timer {
+        id: disappearTimer
+        interval: 30000; running: true
+        onTriggered: {
+            if (powerUp.alive) {
+                powerUp.alive = false;
+                powerUp.destroy();
+            }
+        }
+    }
 
-    function collect() { if (!alive) return; alive = false; disappearTimer.stop(); destroy() }
+    function collect() {
+        if (!alive) return;
+        alive = false;
+        disappearTimer.stop();
+
+        // 主机通知客户端该道具已被收集
+        if (typeof gameRoot !== "undefined" && gameRoot.mode === "host" && typeof NetworkManager !== "undefined") {
+            NetworkManager.sendPowerUpCollected(x, y, type);
+        }
+        destroy();
+    }
 }

@@ -45,8 +45,8 @@ Rectangle {
         }
 
         // ★ 主机模式：通知所有客户端该方块被摧毁
-        if (typeof gameRoot !== "undefined" && gameRoot.mode === "host" && typeof networkManager !== "undefined") {
-            networkManager.sendBlockDestroyed(x, y)
+        if (typeof gameRoot !== "undefined" && gameRoot.mode === "host" && typeof NetworkManager !== "undefined") {
+            NetworkManager.sendBlockDestroyed(x, y)
         }
     }
 }

@@ -378,8 +378,8 @@ Rectangle {
         if (bx < 40 || bx > 1320 || by < 40 || by > 820) return
         if (isBlockedAt(bx, by) || isBombAt(bx, by)) return
         bombComponent.createObject(gameRoot, { x: bx, y: by, range: 1, owner: monster })
-        if (gameRoot.mode === "host" && typeof networkManager !== "undefined") {
-            networkManager.sendBombPlaced(bx, by, 1, 0)
+        if (gameRoot.mode === "host" && typeof NetworkManager !== "undefined") {
+            NetworkManager.sendBombPlaced(bx, by, 1, 0)
         }
     }
 

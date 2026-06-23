@@ -13,8 +13,6 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine engine;
 
-    NetworkManager netManager;
-    engine.rootContext()->setContextProperty("networkManager", &netManager);
 
     const QUrl url(u"qrc:/qt/qml/bubblebomb/Main.qml"_qs);
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,

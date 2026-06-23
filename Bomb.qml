@@ -107,8 +107,8 @@ Rectangle {
         deleteTimer.start()
 
         // ★ 主机通知所有客户端此炸弹已爆炸
-        if (typeof gameRoot !== "undefined" && gameRoot.mode === "host" && typeof networkManager !== "undefined") {
-            networkManager.sendBombExploded(x, y)
+        if (typeof gameRoot !== "undefined" && gameRoot.mode === "host" && typeof NetworkManager !== "undefined") {
+            NetworkManager.sendBombExploded(x, y)
         }
     }
 

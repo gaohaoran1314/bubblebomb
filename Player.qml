@@ -358,8 +358,8 @@ Rectangle {
             }
 
             // ★ 主机发送炸弹放置消息
-            if (gameRoot.mode === "host" && typeof networkManager !== "undefined") {
-                networkManager.sendBombPlaced(bx, by, bombRange, (player === gameRoot.player1 ? 1 : 2))
+            if (gameRoot.mode === "host" && typeof NetworkManager !== "undefined") {
+                NetworkManager.sendBombPlaced(bx, by, bombRange, (player === gameRoot.player1 ? 1 : 2))
             }
         }
     }

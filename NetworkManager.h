@@ -9,13 +9,22 @@
 #include <QJsonArray>
 #include <QNetworkInterface>
 #include <QByteArray>
+#include <QQmlEngine>
+#include <QJSEngine>
 
 class NetworkManager : public QObject
 {
     Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
     Q_PROPERTY(bool isHost READ isHost NOTIFY isHostChanged)
 
 public:
+    static NetworkManager* create(QQmlEngine *, QJSEngine *) {
+        static NetworkManager* instance = new NetworkManager();
+        return instance;
+    }
+
     explicit NetworkManager(QObject *parent = nullptr);
     ~NetworkManager();
 
@@ -34,6 +43,7 @@ public:
     Q_INVOKABLE void sendPowerUpSpawned(int x, int y, const QString &type);
     Q_INVOKABLE void sendBombPlaced(int x, int y, int range, int ownerId);
     Q_INVOKABLE void sendBombExploded(int x, int y);
+    Q_INVOKABLE void sendPowerUpCollected(int x, int y, const QString &type);  // 新增
 
     bool isHost() const { return m_isHost; }
 
@@ -50,6 +60,7 @@ signals:
     void powerUpSpawned(int x, int y, const QString &type);
     void bombPlaced(int x, int y, int range, int ownerId);
     void bombExploded(int x, int y);
+    void powerUpCollected(int x, int y, const QString &type);  // 新增
 
 private slots:
     void onNewConnection();

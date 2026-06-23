@@ -112,6 +112,15 @@ void NetworkManager::sendBombExploded(int x, int y) {
     sendJson(obj);
 }
 
+void NetworkManager::sendPowerUpCollected(int x, int y, const QString &type) {
+    QJsonObject obj;
+    obj["type"] = "powerUpCollected";
+    obj["x"] = x;
+    obj["y"] = y;
+    obj["powerType"] = type;
+    sendJson(obj);
+}
+
 void NetworkManager::onNewConnection() {
     if (socket) { QTcpSocket *ns = server->nextPendingConnection(); ns->close(); return; }
     socket = server->nextPendingConnection();
@@ -159,6 +168,8 @@ void NetworkManager::processMessage(const QJsonObject &msg) {
         emit bombPlaced(msg["x"].toInt(), msg["y"].toInt(), msg["range"].toInt(), msg["ownerId"].toInt());
     } else if (type == "bombExploded") {
         emit bombExploded(msg["x"].toInt(), msg["y"].toInt());
+    } else if (type == "powerUpCollected") {
+        emit powerUpCollected(msg["x"].toInt(), msg["y"].toInt(), msg["powerType"].toString());
     }
 }
 
